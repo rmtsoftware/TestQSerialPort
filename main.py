@@ -40,14 +40,16 @@ class App(QtWidgets.QMainWindow):
         self.msg_signals = Signals()
         
         self.msg_signals.get_gps.connect(lambda: print('gps получено'))
+        self.msg_signals.get_imu.connect(lambda: print('imu получено'))
+        self.msg_signals.get_man_perm.connect(lambda: print('ручная команда получена клиентом'))
         
         
     def start_listen(self):
         self.__init_serial_port()
         self.port.open(QIODevice.OpenModeFlag.ReadWrite)
         self.port.setDataTerminalReady(True)
-       
-        
+
+
     def stop_listen(self):
         self.port.clear()
         self.port.close()
