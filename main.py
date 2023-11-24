@@ -77,10 +77,12 @@ class App(QtWidgets.QMainWindow):
             
             
         if _resp[0:5] == 'D,s,2':
-            print('получение imu')
+            #print('получение imu')
+            self.msg_signals.get_imu.emit()
             
         if _resp[0:5] == 'D,s,3':
-            print('подтверждение отправки ручной команды')
+            #print('подтверждение отправки ручной команды')
+            self.msg_signals.get_man_perm.emit()
             
      
     def get_gps(self):
