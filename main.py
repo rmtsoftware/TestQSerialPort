@@ -1,13 +1,29 @@
 from mainwindow import Ui_MainWindow
 from PySide6 import QtWidgets, QtGui
 from PySide6 import QtSerialPort
-from PySide6.QtCore import QIODevice, QTimer, Signal, QObject
+from PySide6.QtCore import QIODevice, QTimer, Signal, QObject, Slot
 import sys
+import ctypes
+
+
+class EstimatorCS:
+    def __init__(self):
+        self.f = ctypes.cdll.LoadLibrary('.\\c_module\\checksum.dll')
+        self.f.calculateChecksum.restype = ctypes.c_char
+        self.f.calculateChecksum.argtypes = [ctypes.POINTER(ctypes.c_char), ]
+
+    def get_CS(self, cmd):
+        return ord(self.f.calculateChecksum(cmd.encode('utf-8')))
+
+cmd = 'D,s,1,49,5949.08250,N,03019.66393,S,00155.5,2023,10,23,180723.00,0.004,*,96,\r,\n'
+estimator = EstimatorCS()
+cs = estimator.get_CS(cmd)
+print(cs)
 
 class Signals(QObject):
-    get_gps = Signal()
-    get_imu = Signal()
-    get_man_perm = Signal()
+    get_gps = Signal(object)
+    get_imu = Signal(object)
+    get_man_perm = Signal(object)
 
 
 class Base:
@@ -38,12 +54,14 @@ class App(QtWidgets.QMainWindow):
         self.port.readyRead.connect(self.readFromSerial)
         
         self.msg_signals = Signals()
+
+        self.estimator = EstimatorCS()
         
-        self.msg_signals.get_gps.connect(lambda: print('gps получено'))
+        self.msg_signals.get_gps.connect(self.actns_rcv_gps)
         self.msg_signals.get_imu.connect(lambda: print('imu получено'))
         self.msg_signals.get_man_perm.connect(lambda: print('ручная команда получена клиентом'))
-        
-        
+
+
     def start_listen(self):
         self.__init_serial_port()
         self.port.open(QIODevice.OpenModeFlag.ReadWrite)
@@ -56,7 +74,7 @@ class App(QtWidgets.QMainWindow):
 
       
     def __init_serial_port(self):
-        self.port.setPortName("COM3")
+        self.port.setPortName("COM5")
         self.port.setBaudRate(QtSerialPort.QSerialPort.BaudRate.Baud115200)
         self.port.setParity(QtSerialPort.QSerialPort.Parity.NoParity)
         self.port.setDataBits(QtSerialPort.QSerialPort.DataBits.Data8)
@@ -73,7 +91,7 @@ class App(QtWidgets.QMainWindow):
         
         if _resp[0:5] == 'D,s,1':
             #print('получение gps')
-            self.msg_signals.get_gps.emit()
+            self.msg_signals.get_gps.emit(_resp)
             
             
         if _resp[0:5] == 'D,s,2':
@@ -84,7 +102,6 @@ class App(QtWidgets.QMainWindow):
             #print('подтверждение отправки ручной команды')
             self.msg_signals.get_man_perm.emit()
             
-     
     def get_gps(self):
         self.port.write(b'D,s,4,GPS*\r\n')
         
@@ -93,7 +110,19 @@ class App(QtWidgets.QMainWindow):
         
     def write_manual(self):
         self.port.write(b'D,s,3,F,100*\r\n')
+
+    @Slot(object)
+    def actns_rcv_gps(self, rcv_msg):
+        _calculatedCS = self.estimator.get_CS(rcv_msg)
+        _parsedCS = int(rcv_msg.split(',')[-3:-2][0])
+
+        if _calculatedCS != _parsedCS:
+            print("Ошибка CRC")
+            return -1
         
+        if _calculatedCS == _parsedCS:
+            print('Данные получены успешно')
+            return 0
         
 if __name__ == '__main__':
     app = QtWidgets.QApplication(sys.argv)
