@@ -34,6 +34,9 @@ class Base:
     def get_gps(self): ...
     def get_imu(self): ...
     def write_manual(self): ...
+    def actns_rcv_gps(self): ...
+    def actns_rcv_imu(self): ...
+    def actns_rcv_man_perm(self): ...
     
     
 class App(QtWidgets.QMainWindow):
@@ -58,8 +61,8 @@ class App(QtWidgets.QMainWindow):
         self.estimator = EstimatorCS()
         
         self.msg_signals.get_gps.connect(self.actns_rcv_gps)
-        self.msg_signals.get_imu.connect(lambda: print('imu получено'))
-        self.msg_signals.get_man_perm.connect(lambda: print('ручная команда получена клиентом'))
+        self.msg_signals.get_imu.connect(self.actns_rcv_imu)
+        self.msg_signals.get_man_perm.connect(self.actns_rcv_man_perm)
 
 
     def start_listen(self):
@@ -96,20 +99,24 @@ class App(QtWidgets.QMainWindow):
             
         if _resp[0:5] == 'D,s,2':
             #print('получение imu')
-            self.msg_signals.get_imu.emit()
+            self.msg_signals.get_imu.emit(_resp)
             
         if _resp[0:5] == 'D,s,3':
             #print('подтверждение отправки ручной команды')
-            self.msg_signals.get_man_perm.emit()
-            
+            self.msg_signals.get_man_perm.emit(_resp)
+
+
     def get_gps(self):
         self.port.write(b'D,s,4,GPS*\r\n')
-        
+
+
     def get_imu(self):
         self.port.write(b'D,s,4,IMU*\r\n')
-        
+
+
     def write_manual(self):
         self.port.write(b'D,s,3,F,100*\r\n')
+
 
     @Slot(object)
     def actns_rcv_gps(self, rcv_msg):
@@ -123,6 +130,16 @@ class App(QtWidgets.QMainWindow):
         if _calculatedCS == _parsedCS:
             print('Данные получены успешно')
             return 0
+
+
+    @Slot(object)
+    def actns_rcv_imu(self, rcv_msg):
+        pass
+
+
+    @Slot(object)
+    def actns_rcv_man_perm(self, rcv_msg):
+        pass
         
 if __name__ == '__main__':
     app = QtWidgets.QApplication(sys.argv)
