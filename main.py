@@ -16,11 +16,6 @@ class EstimatorCS:
     def get_CS(self, cmd):
         return ord(self.f.calculateChecksum(cmd.encode('utf-8')))
 
-cmd = 'D,s,1,49,5949.08250,N,03019.66393,S,00155.5,2023,10,23,180723.00,0.004,*,96,\r,\n'
-estimator = EstimatorCS()
-cs = estimator.get_CS(cmd)
-print(cs)
-
 class Signals(QObject):
     get_gps = Signal(object)
     get_imu = Signal(object)
@@ -80,6 +75,8 @@ class App(QtWidgets.QMainWindow):
         self._s_flag = False
         self._d_flag = False
 
+        self._manCS = 0
+
         self.msg_signals.mov_forw.connect(self.actns_press_w)
         self.msg_signals.mov_back.connect(self.actns_press_s)
         self.msg_signals.mov_left.connect(self.actns_press_a)
@@ -107,23 +104,26 @@ class App(QtWidgets.QMainWindow):
         
     def readFromSerial(self):
         
+        DEBAG = True
+
         _b_resp = self.port.readAll()
         _resp =  bytes(_b_resp ).decode()
         
-        if _resp == 'D,s,4,GPS*\r\n': _resp = 'D,s,1,49,5949.08250,N,03019.66393,S,00155.5,2023,10,23,180723.00,0.004,*,96,\r,\n'
-        if _resp == 'D,s,4,IMU*\r\n': _resp = 'D,s,2,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,185,*,81,\r,\n'
+        if DEBAG == True:
+            if _resp == 'D,s,4,GPS*\r\n': _resp = 'D,s,1,49,5949.08250,N,03019.66393,S,00155.5,2023,10,23,180723.00,0.004,*,96,\r,\n'
+            if _resp == 'D,s,4,IMU*\r\n': _resp = 'D,s,2,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,185,*,81,\r,\n'
+            if _resp == 'D,s,3,F,100*\r\n': _resp = 'D,s,3,*,27,\r,\n'
+            if _resp == 'D,s,3,B,100*\r\n': _resp = 'D,s,3,*,31,\r,\n'
+            if _resp == 'D,s,3,R,100*\r\n': _resp = 'D,s,3,*,15,\r,\n'
+            if _resp == 'D,s,3,L,100*\r\n': _resp = 'D,s,3,*,17,\r,\n'
         
         if _resp[0:5] == 'D,s,1':
-            #print('получение gps')
             self.msg_signals.get_gps.emit(_resp)
             
-            
         if _resp[0:5] == 'D,s,2':
-            #print('получение imu')
             self.msg_signals.get_imu.emit(_resp)
             
         if _resp[0:5] == 'D,s,3':
-            #print('подтверждение отправки ручной команды')
             self.msg_signals.get_man_perm.emit(_resp)
 
 
@@ -138,7 +138,7 @@ class App(QtWidgets.QMainWindow):
     def write_manual(self, direction):
         cmd = f'D,s,3,{direction},100*\r\n'
         self.port.write(bytes(cmd, 'utf-8'))
-        print(cmd)
+        self._manCS = self.estimator.get_CS(cmd)
 
 
     @Slot(object)
@@ -168,11 +168,23 @@ class App(QtWidgets.QMainWindow):
             print('IMU данные получены успешно')
             return 0
 
+
     @Slot(object)
     def actns_rcv_man_perm(self, rcv_msg):
-        pass
+        try:
+            _parsedCS = int(rcv_msg.split(',')[-3:-2][0])
+        except Exception as e:
+            print(e)
 
-    
+        if self._manCS != _parsedCS:
+            print("Ошибка записи ручной команды")
+            print(f"Получено: {rcv_msg}")
+            return -1
+        
+        if self._manCS == _parsedCS:
+            return 0
+        
+
     def keyPressEvent(self, event):
         key_press = event.key()
 
@@ -198,6 +210,7 @@ class App(QtWidgets.QMainWindow):
             return
         self._w_flag = True
         self.write_manual('F') # Forward
+        print('Forward')
         QTimer.singleShot(500, _reset_flag)
 
 
@@ -210,6 +223,7 @@ class App(QtWidgets.QMainWindow):
             return
         self._s_flag = True
         self.write_manual('B') # Back
+        print('Back')
         QTimer.singleShot(500, _reset_flag)
 
 
@@ -222,6 +236,7 @@ class App(QtWidgets.QMainWindow):
             return
         self._a_flag = True
         self.write_manual('L') # Left
+        print('Left')
         QTimer.singleShot(500, _reset_flag)
 
 
@@ -234,6 +249,7 @@ class App(QtWidgets.QMainWindow):
             return
         self._d_flag = True 
         self.write_manual('R') # Right
+        print('Right')
         QTimer.singleShot(500, _reset_flag)
 
         
