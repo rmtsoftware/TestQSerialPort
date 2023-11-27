@@ -124,18 +124,26 @@ class App(QtWidgets.QMainWindow):
         _parsedCS = int(rcv_msg.split(',')[-3:-2][0])
 
         if _calculatedCS != _parsedCS:
-            print("Ошибка CRC")
+            print("Ошибка CRC данных GPS")
             return -1
         
         if _calculatedCS == _parsedCS:
-            print('Данные получены успешно')
+            print('GPS данные получены успешно')
             return 0
 
 
     @Slot(object)
     def actns_rcv_imu(self, rcv_msg):
-        pass
+        _calculatedCS = self.estimator.get_CS(rcv_msg)
+        _parsedCS = int(rcv_msg.split(',')[-3:-2][0])
 
+        if _calculatedCS != _parsedCS:
+            print("Ошибка CRC данных IMU")
+            return -1
+        
+        if _calculatedCS == _parsedCS:
+            print('IMU данные получены успешно')
+            return 0
 
     @Slot(object)
     def actns_rcv_man_perm(self, rcv_msg):
