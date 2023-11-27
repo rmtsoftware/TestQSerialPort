@@ -25,10 +25,10 @@ class Signals(QObject):
     get_gps = Signal(object)
     get_imu = Signal(object)
     get_man_perm = Signal(object)
-    mov_forw = Signal(object)
-    mov_back = Signal(object)
-    mov_left = Signal(object)
-    mov_right= Signal(object)
+    mov_forw = Signal()
+    mov_back = Signal()
+    mov_left = Signal()
+    mov_right= Signal()
 
 
 class Base:
@@ -42,6 +42,7 @@ class Base:
     def actns_rcv_gps(self): ...
     def actns_rcv_imu(self): ...
     def actns_rcv_man_perm(self): ...
+    def keyPressEvent(self): ...
     
     
 class App(QtWidgets.QMainWindow):
@@ -68,6 +69,16 @@ class App(QtWidgets.QMainWindow):
         self.msg_signals.get_gps.connect(self.actns_rcv_gps)
         self.msg_signals.get_imu.connect(self.actns_rcv_imu)
         self.msg_signals.get_man_perm.connect(self.actns_rcv_man_perm)
+
+        self._w_flag = False
+        self._a_flag = False
+        self._s_flag = False
+        self._d_flag = False
+
+        self.msg_signals.mov_forw.connect(self.actns_press_w)
+        self.msg_signals.mov_back.connect(self.actns_press_s)
+        self.msg_signals.mov_left.connect(self.actns_press_a)
+        self.msg_signals.mov_right.connect(self.actns_press_d)
 
 
     def start_listen(self):
@@ -119,8 +130,10 @@ class App(QtWidgets.QMainWindow):
         self.port.write(b'D,s,4,IMU*\r\n')
 
 
-    def write_manual(self):
-        self.port.write(b'D,s,3,F,100*\r\n')
+    def write_manual(self, direction):
+        cmd = f'D,s,3,{direction},100*\r\n'
+        self.port.write(bytes(cmd, 'utf-8'))
+        print(cmd)
 
 
     @Slot(object)
@@ -166,9 +179,57 @@ class App(QtWidgets.QMainWindow):
 
         if key_press == QtCore.Qt.Key.Key_A:
             self.msg_signals.mov_left.emit()
-            
+
         if key_press == QtCore.Qt.Key.Key_D:
             self.msg_signals.mov_right.emit()
+
+    
+    def actns_press_w(self):
+
+        def _reset_flag():
+            self._w_flag = False
+
+        if self._w_flag == True:
+            return
+        self._w_flag = True
+        self.write_manual('F') # Forward
+        QTimer.singleShot(500, _reset_flag)
+
+
+    def actns_press_s(self):
+
+        def _reset_flag():
+            self._s_flag = False
+
+        if self._s_flag == True:
+            return
+        self._s_flag = True
+        self.write_manual('B') # Back
+        QTimer.singleShot(500, _reset_flag)
+
+
+    def actns_press_a(self):
+
+        def _reset_flag():
+            self._a_flag = False
+
+        if self._a_flag == True:
+            return
+        self._a_flag = True
+        self.write_manual('L') # Left
+        QTimer.singleShot(500, _reset_flag)
+
+
+    def actns_press_d(self):
+
+        def _reset_flag():
+            self._d_flag = False
+
+        if self._d_flag == True:
+            return
+        self._d_flag = True 
+        self.write_manual('R') # Right
+        QTimer.singleShot(500, _reset_flag)
 
         
 if __name__ == '__main__':
