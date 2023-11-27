@@ -2,6 +2,7 @@ from mainwindow import Ui_MainWindow
 from PySide6 import QtWidgets, QtGui
 from PySide6 import QtSerialPort
 from PySide6.QtCore import QIODevice, QTimer, Signal, QObject, Slot
+from PySide6 import QtCore
 import sys
 import ctypes
 
@@ -24,6 +25,10 @@ class Signals(QObject):
     get_gps = Signal(object)
     get_imu = Signal(object)
     get_man_perm = Signal(object)
+    mov_forw = Signal(object)
+    mov_back = Signal(object)
+    mov_left = Signal(object)
+    mov_right= Signal(object)
 
 
 class Base:
@@ -148,6 +153,23 @@ class App(QtWidgets.QMainWindow):
     @Slot(object)
     def actns_rcv_man_perm(self, rcv_msg):
         pass
+
+    
+    def keyPressEvent(self, event):
+        key_press = event.key()
+
+        if key_press == QtCore.Qt.Key.Key_W:
+            self.msg_signals.mov_forw.emit()
+
+        if key_press == QtCore.Qt.Key.Key_S:
+            self.msg_signals.mov_back.emit()
+
+        if key_press == QtCore.Qt.Key.Key_A:
+            self.msg_signals.mov_left.emit()
+            
+        if key_press == QtCore.Qt.Key.Key_D:
+            self.msg_signals.mov_right.emit()
+
         
 if __name__ == '__main__':
     app = QtWidgets.QApplication(sys.argv)
