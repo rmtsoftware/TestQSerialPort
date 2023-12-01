@@ -5,7 +5,12 @@ from PySide6.QtCore import QIODevice, QTimer, Signal, QObject, Slot
 from PySide6 import QtCore
 import sys
 import ctypes
+import logging
+import datetime
+ 
 
+# Конфиг логгирования
+logging.basicConfig(level=logging.INFO, filename="py_log.log", filemode="a")
 
 class EstimatorCS:
     def __init__(self):
@@ -52,6 +57,8 @@ class App(QtWidgets.QMainWindow):
         self.ui = Ui_MainWindow()
         self.ui.setupUi(self)
         
+        print('Устройство отключено')
+        
         self.ui.btn_connect.clicked.connect(self.start_listen)
         self.ui.btn_disconnect.clicked.connect(self.stop_listen)
         
@@ -81,6 +88,14 @@ class App(QtWidgets.QMainWindow):
         self.msg_signals.mov_back.connect(self.actns_press_s)
         self.msg_signals.mov_left.connect(self.actns_press_a)
         self.msg_signals.mov_right.connect(self.actns_press_d)
+        
+        self.buffer = ''
+        
+        self._t = QTimer()
+        self._t.timeout.connect(self._get_status)
+        self._t.start(100)
+        
+        self.i = 0
 
 
     def start_listen(self):
@@ -95,7 +110,7 @@ class App(QtWidgets.QMainWindow):
 
       
     def __init_serial_port(self):
-        self.port.setPortName("COM5")
+        self.port.setPortName("COM3")
         self.port.setBaudRate(QtSerialPort.QSerialPort.BaudRate.Baud115200)
         self.port.setParity(QtSerialPort.QSerialPort.Parity.NoParity)
         self.port.setDataBits(QtSerialPort.QSerialPort.DataBits.Data8)
@@ -107,15 +122,37 @@ class App(QtWidgets.QMainWindow):
         DEBAG = True
 
         _b_resp = self.port.readAll()
-        _resp =  bytes(_b_resp ).decode()
+        _resp0 =  bytes(_b_resp ).decode()
+        
+        self.buffer += _resp0
+        
+        coindence = 0
+        for idx, sym in enumerate(self.buffer):
+            if sym == '\r':
+                try:
+                    if self.buffer[idx+1] == '\n':
+                        _resp = self.buffer[0:idx+2]
+                        self.buffer = self.buffer[idx+3:]
+                        coindence += 1
+                        break
+                except IndexError as e:
+                    continue
+                
+        if coindence == 0:
+            return
         
         if DEBAG == True:
-            if _resp == 'D,s,4,GPS*\r\n': _resp = 'D,s,1,49,5949.08250,N,03019.66393,S,00155.5,2023,10,23,180723.00,0.004,*,96,\r,\n'
-            if _resp == 'D,s,4,IMU*\r\n': _resp = 'D,s,2,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,185,*,81,\r,\n'
-            if _resp == 'D,s,3,F,100*\r\n': _resp = 'D,s,3,*,27,\r,\n'
-            if _resp == 'D,s,3,B,100*\r\n': _resp = 'D,s,3,*,31,\r,\n'
-            if _resp == 'D,s,3,R,100*\r\n': _resp = 'D,s,3,*,15,\r,\n'
-            if _resp == 'D,s,3,L,100*\r\n': _resp = 'D,s,3,*,17,\r,\n'
+            if _resp == 'D,s,4,GPS*\r\n': _resp = 'D,s,1,49,5949.08250,N,03019.66393,S,00155.5,2023,10,23,180723.00,0.004,*96\r\n'
+            if _resp == 'D,s,4,IMU*\r\n': _resp = 'D,s,2,65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,185,*81\r\n'
+            if _resp == 'D,s,3,F,100*\r\n': _resp = 'D,s,3,*,27\r\n'
+            if _resp == 'D,s,3,B,100*\r\n': _resp = 'D,s,3,*,31\r\n'
+            if _resp == 'D,s,3,R,100*\r\n': _resp = 'D,s,3,*,15\r\n'
+            if _resp == 'D,s,3,L,100*\r\n': _resp = 'D,s,3,*,17\r\n'
+        
+        
+        msg = f'[{self._cur_time()}] - [SEND] -\t{_resp[:-2]}'
+        print(msg)
+        logging.info(msg)
         
         if _resp[0:5] == 'D,s,1':
             self.msg_signals.get_gps.emit(_resp)
@@ -127,8 +164,63 @@ class App(QtWidgets.QMainWindow):
             self.msg_signals.get_man_perm.emit(_resp)
 
 
+    def _get_status(self):
+        
+        s = self.port.error()
+        
+        if self.port.isOpen():
+            if self.i == 0:
+                print('Устройство подлюченно')
+                self.i += 1
+        else:
+            if self.i == 1:
+                print('Устройство отключено')
+                self.i -= 1
+        
+        if s == QtSerialPort.QSerialPort.SerialPortError.NotOpenError:
+            
+            if self.port.isOpen():
+                print('Устройство подключено и NotOpenError')
+            
+            if not self.port.isOpen():
+                print('[Error] - NotOpenError - Устройство не доступно')
+                self.stop_listen()
+                
+            
+        
+        
+        if s == QtSerialPort.QSerialPort.SerialPortError.ResourceError:
+            print('ResourceError')
+            
+        
+        if s == QtSerialPort.QSerialPort.SerialPortError.WriteError:
+            print('WriteError')
+        
+        if s == QtSerialPort.QSerialPort.SerialPortError.PermissionError:
+            print('PermissionError')
+            
+        if s == QtSerialPort.QSerialPort.SerialPortError.OpenError:
+            if self.port.isOpen():
+                print('[Error] - OpenError - Устройство уже подлючено')
+            if not self.port.isOpen():
+                print('Устройство не подключено и OpenError')
+            
+        self.port.clearError()
+        
+        
+    
     def get_gps(self):
-        self.port.write(b'D,s,4,GPS*\r\n')
+        
+        cmd = 'D,s,4,GPS*\r\n'
+        self.port.write(bytes(cmd, 'utf-8'))
+        
+        msg = f'[{self._cur_time()}] - [SEND] -\t{cmd[:-2]}'
+        print(msg)
+        
+        info = QtSerialPort.QSerialPortInfo(self.port)
+        s = self.port.error()
+
+        logging.info(msg)
 
 
     def get_imu(self):
@@ -144,17 +236,16 @@ class App(QtWidgets.QMainWindow):
     @Slot(object)
     def actns_rcv_gps(self, rcv_msg):
         _calculatedCS = self.estimator.get_CS(rcv_msg)
-        _parsedCS = int(rcv_msg.split(',')[-3:-2][0])
-
+        _parsedCS =int(rcv_msg.split(',')[-1][1:-2])
+    
         if _calculatedCS != _parsedCS:
-            print("Ошибка CRC данных GPS")
+            print("CRC error with GPS data")
             return -1
         
         if _calculatedCS == _parsedCS:
-            print('GPS данные получены успешно')
-            return 0
-
-
+            print('')
+            return 0    
+        
     @Slot(object)
     def actns_rcv_imu(self, rcv_msg):
         _calculatedCS = self.estimator.get_CS(rcv_msg)
@@ -251,6 +342,9 @@ class App(QtWidgets.QMainWindow):
         self.write_manual('R') # Right
         print('Right')
         QTimer.singleShot(500, _reset_flag)
+        
+    def _cur_time(self):
+        return datetime.datetime.now().strftime("%H:%M:%S.%f")[:-3]
 
         
 if __name__ == '__main__':
